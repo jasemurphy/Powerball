@@ -321,3 +321,101 @@ draws1822clean %>%
   ggsave(filename = paste("naive EV, 2022", 
                         format(Sys.time(), "%Y-%m-%d"), ".jpeg"), 
        width = 2740, height =2740, units ="px")
+       
+       #Chart to show number of winners and Division One prizes over time
+
+draws1822%>% 
+  filter(division ==1) %>% 
+  filter(date>"2019-04-01") %>% 
+  mutate(label = if_else(winners>0, as.character(winners), NA_character_)) %>% 
+  ggplot()+
+  aes(x=date, y = div1advertised, fill = winners)+
+  geom_col(show.legend = FALSE)+
+  geom_text(aes(label = label), vjust =-.2, size = 6, colour = "white",show.legend = FALSE)+
+  labs(title = "Division 1 prizes and numbers of winners.")+
+  ylab("Division 1 Advertised Prize")+
+  xlab("Date of Powerball Draw")+
+  scale_fill_gradientn(colours = c("grey40", "orange", "red","dark red"))+
+  scale_y_continuous(labels = scales::dollar)+
+  theme(panel.background = element_rect(fill="blue4"),
+        panel.grid.major.x =  element_line(colour = "grey", size =.1),
+        panel.grid.minor.x =  element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", size =.1),
+        panel.grid.minor.y = element_blank(),
+        plot.title = element_text(colour = "white",  size =22),
+        axis.text = element_text(colour = "light grey", size =14),
+        axis.title = element_text(colour = "white", size =14),
+        plot.background = element_rect(fill = "blue4"))
+
+ggsave(filename = paste("Total prizes awarded each week, and number of winners",format(Sys.time(), "%Y-%m-%d"), ".jpeg"), 
+       width = 2740, height =1840, units ="px")
+
+
+#Graph showing actual EV vs naive EV in geom_point
+
+draws1822clean %>%
+  group_by(date) %>% 
+  mutate(entries2 = if_else(division == 9, winners*66, 0) ) %>% #these two mutate lines copy the number of entries calculated for div9 to the whole date.
+  mutate(entries3 = sum(entries2)) %>% 
+  ungroup() %>% 
+  mutate(check1 = if_else(division == 2, 1,0)) %>% 
+  mutate(check2 = if_else(winners == 0, 1,0)) %>% 
+  mutate(check3 = check1*check2) %>% 
+  mutate(prize = if_else(check3 == 1, div2prizepred, prize)) %>% 
+  mutate(oddsnowinner = (1-Odds)^entries3) %>% 
+  mutate (odds1winner = ((entries3*Odds)^1 * e^-(entries3*Odds)) / factorial(1)) %>%   
+  mutate (odds2winner = ((entries3*Odds)^2 * e^-(entries3*Odds)) / factorial(2)) %>% 
+  mutate (odds3winner = ((entries3*Odds)^3 * e^-(entries3*Odds)) / factorial(3)) %>% 
+  mutate (odds4winner = ((entries3*Odds)^4 * e^-(entries3*Odds)) / factorial(4)) %>% 
+  mutate (odds5winner = ((entries3*Odds)^5 * e^-(entries3*Odds)) / factorial(5)) %>%   
+  mutate (odds6winner = ((entries3*Odds)^6 * e^-(entries3*Odds)) / factorial(6)) %>% 
+  mutate (odds7winner = ((entries3*Odds)^7 * e^-(entries3*Odds)) / factorial(7)) %>% 
+  mutate (odds8winner = ((entries3*Odds)^8 * e^-(entries3*Odds)) / factorial(8)) %>% 
+  mutate(expected_value =  if_else(division == 1, (
+    Odds*(
+      div1advertised -
+        ((div1advertised/2)*odds2winner +
+           (div1advertised*2/3)*odds3winner +
+           (div1advertised*3/4)*odds4winner +
+           (div1advertised*4/5)*odds5winner +
+           (div1advertised*5/6)*odds6winner +
+           (div1advertised*6/7)*odds7winner +
+           (div1advertised*7/8)*odds8winner) 
+    )), prize*Odds)) %>% 
+  
+ mutate(check1 = if_else(winners>1, 1,0)) %>% 
+  mutate(check2 = if_else(division == 1, 1,0)) %>% 
+mutate(check3 = check1*check2) %>% 
+  mutate(EV = if_else(check3==1, div1advertised*Odds, prize*Odds )) %>% 
+  select (EV,check3, division, prize,prize_pool, winners, date, div1advertised, expected_value) %>% 
+group_by(date) %>% 
+  mutate(total_exp = sum(expected_value)) %>% 
+  mutate(total_EV = sum(EV)) %>% 
+  ungroup() %>% 
+  ggplot()+
+  aes(x=total_EV, y= total_exp, colour = div1advertised, size = div1advertised)+
+  scale_size(guide = 'none')+
+  scale_y_continuous(limits = c(.5, 1.55),breaks = c(.6, .9, 1.2, 1.5))+
+  scale_colour_gradientn(colours = c("white", "yellow", "gold", "orange"),labels = scales::dollar, name = "Div 1 Prize")+
+  geom_point()+geom_smooth(se = FALSE, show.legend = FALSE)+
+  labs(title = "When the jackpot is high, splitting the pot kills your upside")+
+  xlab("Naive EV")+
+  ylab("Expected Value accounting for multiple winners")+
+  theme(panel.background = element_rect(fill="blue4"),
+        panel.grid.major.x =  element_line(colour = "grey", size =.1),
+        panel.grid.minor.x =  element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", size =.1),
+        panel.grid.minor.y = element_blank(),
+        legend.background = element_rect(fill="blue4"),
+        legend.text = element_text(colour = "white", size =10),
+        legend.title = element_text(colour = "white", size =16),
+        plot.title = element_text(colour = "white",  size =18),
+        plot.subtitle = element_text(colour = "white",  size =14),
+        axis.text = element_text(colour = "light grey", size =14),
+        axis.title = element_text(colour = "white",  size =12),
+        plot.background = element_rect(fill = "blue4"))
+
+
+ggsave(filename = paste("True EV vs naive EV",format(Sys.time(), "%Y-%m-%d"), ".jpeg"), 
+       width = 2740, height =1840, units ="px")
+  
