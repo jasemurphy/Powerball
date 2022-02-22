@@ -1,3 +1,5 @@
+Done in RStudio.
+
 #install needed packages
 
 library(tidyverse)
@@ -103,7 +105,7 @@ ggsave(filename = paste("odds of winning each division in powerball, log axis",
                         format(Sys.time(), "%Y-%m-%d"), ".jpeg"),
        width = 2740, height =1840, units ="px" )
 
-#Chart to show number  Division One prizes over time
+#Chart to show number of Division One prizes over time
 
 draws1822%>% 
   filter(division ==1) %>% 
@@ -181,9 +183,49 @@ div1odds <-   odds_of_winning %>%
 
 oddsetc <- grid %>% 
   mutate(odds = div1odds) 
+  
+   #model to predict div 2prize Pool based on div1 prize
+  
+  div2model_numbers <- draws1822 %>% 
+  group_by(date) %>% 
+  mutate(entries = if_else(division == 9, winners*66, 0)) %>% 
+  mutate(entries = sum(entries)) %>% 
+  ungroup() %>% 
+  filter(division == "2") 
+  
+  
+  
+div2_Prizeentries_model <- lm(prize ~ entries, data = div2model_numbers)  
 
-draws1822 %>% 
-  filter(str_starts(prize_pool,"Jackpotted"))
+coef(div2_Prizeentries_model)
+
+div2grid_Prizeentries <- div2model_numbers %>% 
+  data_grid(entries)
+
+div2grid2_Prizeentries <- div2grid_Prizeentries %>% 
+  add_predictions(div2_Prizeentries_model)
+
+div2model_numbers %>% 
+  ggplot(aes(entries))+
+  geom_point(aes(y=prize))+
+  geom_line(aes(y=pred), data = div2grid2_Prizeentries, colour="red", size = 1)
+  
+  draws1822_d2_p <- draws1822 %>% 
+  group_by(date) %>% 
+  mutate(entries = if_else(division == 9, winners*66, 0)) %>% 
+  mutate(entries = sum(entries)) %>% 
+  ungroup() %>% 
+  left_join(div2grid2_Prizeentries, by = "entries") %>% 
+  rename("div2prizepred" = "pred") %>% 
+  select(-columnfordiv1, -`Numbers Matched`)
+  
+  draws1822withdiv2 <- draws1822_d2_p %>% 
+  mutate(d2c = if_else(division == 2, 1, 0)) %>% 
+  mutate(d2c2 = if_else(winners == 0, 1, 0)) %>% 
+  mutate(d2c3 = d2c*d2c2) %>% 
+  mutate(prize = if_else(d2c3 == 1, div2prizepred, prize )) %>% 
+  select(-d2c, -d2c2, -d2c3)
+
 
 draws1822clean <- draws1822 %>% 
   select(division,prize, winners, prize_pool, date, div1advertised) %>% 
@@ -196,3 +238,86 @@ draws1822clean <- draws1822 %>%
   left_join(oddsetc, by = "div1advertised") %>% 
   select(-multi, -inverse, -odds2winners,-words, -odds3w ) %>% 
 right_join(draws1822withdiv2, by = "date")
+
+  #Make basic stacked column chart showing EVs for a single powerball draw.
+
+draws1822clean %>% 
+  filter(date == "2022-01-13") %>% 
+  mutate(check1 = if_else(division == 2, 1,0)) %>% 
+mutate(check2 = if_else(winners == 0, 1,0)) %>% 
+mutate(check3 = check1*check2) %>% 
+  mutate(prize = if_else(check3 == 1, div2prizepred, prize)) %>% 
+  mutate(EV = prize*Odds ) %>% 
+  mutate(roundEV = round(EV, 3)) %>% 
+  group_by(date) %>% 
+  mutate(label = paste0("Division", division, ": $",roundEV)) %>% 
+  mutate(totalEV = sum(EV)) %>% 
+  mutate(division2 = as.factor(division)) %>% 
+  mutate(order = fct_reorder(division2, division)) %>% 
+  ungroup() %>% 
+  ggplot()+
+  aes(y = EV, x=date, fill = division2)+
+  geom_col(show.legend = FALSE)+
+  scale_fill_brewer()+
+  scale_y_continuous(limits = c(0, .5), labels = scales::dollar)+
+geom_text(aes(label = label, group = order), position = position_stack(vjust = .5), show.legend = FALSE)+
+  labs(title = "On the 13th of January this year, a $3 million Division 1 prize was offered. \nA basic calculation of the expected payoff of your Powerball ticket was 42.5 cents.\nMost of which - around 15 cents - came from Division 9 ")+
+  
+  theme(panel.background = element_rect(fill="blue4"),
+        panel.grid.major.x =  element_line(colour = "grey", size =.1),
+        panel.grid.minor.x =  element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", size =.1),
+        panel.grid.minor.y = element_blank(),
+        plot.title = element_text(colour = "white",  size =16),
+        axis.text = element_text(colour = "light grey", size =14),
+        axis.title.y = element_text(colour = "white", size =14),
+        axis.title.x = element_blank(),
+        plot.background = element_rect(fill = "blue4"))
+
+
+ggsave(filename = paste("naive EV, 13 Jan", 
+                        format(Sys.time(), "%Y-%m-%d"), ".jpeg"), 
+       width = 2740, height =1840, units ="px")
+
+#repeat for multiple dates
+
+
+draws1822clean %>% 
+  filter(date > "2022-01-01") %>% 
+  mutate(check1 = if_else(division == 2, 1,0)) %>% 
+  mutate(check2 = if_else(winners == 0, 1,0)) %>% 
+  mutate(check3 = check1*check2) %>% 
+  mutate(prize = if_else(check3 == 1, div2prizepred, prize)) %>% 
+  mutate(EV = prize*Odds ) %>% 
+  mutate(roundEV = round(EV, 3)) %>% 
+  group_by(date) %>% 
+  mutate(label = paste0("Div", division, ": $",roundEV)) %>% 
+  mutate(totalEV = sum(EV)) %>% 
+  mutate(division2 = as.factor(division)) %>% 
+  mutate(order = fct_reorder(division2, division)) %>% 
+  ungroup() %>% 
+  ggplot()+
+  aes(y = EV, x=date, fill = division2)+
+  geom_col(show.legend = FALSE)+
+  geom_abline(slope = 0, intercept = 1.21, colour = "red")+
+  scale_fill_brewer()+
+  scale_x_date(labels = c("6 Jan, $60m", "13 Jan, $3m", "20 Jan, $8m", "27 Jan, $20m", "3 Feb, $40m", "10 Feb, $60m", "17 Feb, $80m"), breaks = as.Date(c("2022-01-06", "2022-01-13", "2022-01-20", "2022-01-27", "2022-02-03", "2022-02-10", "2022-02-17")))+
+  scale_y_continuous(limits = c(0, 1.25), labels = scales::dollar)+
+  geom_text(aes(label = label, group = order), size  = 2.3, position = position_stack(vjust = .5), show.legend = FALSE)+
+  labs(title = "No draws this year have had an expected payoff equal to \nthe cost of the ticket (red line), using the basic calculation")+
+  
+  theme(panel.background = element_rect(fill="blue4"),
+        panel.grid.major.x =  element_line(colour = "grey", size =.1),
+        panel.grid.minor.x =  element_blank(),
+        panel.grid.major.y = element_line(colour = "grey", size =.1),
+        panel.grid.minor.y = element_blank(),
+        plot.title = element_text(colour = "white",  size =16),
+        axis.text.x = element_text(colour = "light grey", size =14, angle = 45, hjust = 1.1, vjust = 1.4),
+        axis.text.y = element_text(colour = "light grey", size =14),
+        axis.title.y = element_text(colour = "white", size =14),
+        axis.title.x = element_blank(),
+        plot.background = element_rect(fill = "blue4"))
+
+  ggsave(filename = paste("naive EV, 2022", 
+                        format(Sys.time(), "%Y-%m-%d"), ".jpeg"), 
+       width = 2740, height =2740, units ="px")
